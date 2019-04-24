@@ -1,0 +1,106 @@
+ public object IsSSOUserAuhtorized(string userEmail)
+        {
+            Immidart.Service.IdentitySystem.Service serviceObj = new Immidart.Service.IdentitySystem.Service();
+            //use auto mapper
+            //UserAuthenticateResponseModel respObject = new UserAuthenticateResponseModel();
+            try
+            {
+                string appUserName = Utility.GetAppSettingsValue("APIUserName");
+                string appUserPassword = Utility.GetAppSettingsValue("APIUserPassword");
+                string appKey = Utility.GetAppSettingsValue("AppKey");
+                object result = (object)serviceObj.SSOAuthenticate(userEmail, appKey, appUserName, appUserPassword);               
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+            return null;
+        }
+		
+		
+		 public UserAuthenticateResponseModel SSOAuthenticate(string userName, string productKey, string apiUserName, string apiUserPassword)
+        {
+            try
+            {
+                var user = new Model.SSOUserAuthenticateRequestModel()
+                {
+                    UserEmail = userName
+                };
+
+                HttpClient client = new HttpClient();
+                client.BaseAddress = new Uri(Helper.BaseAddress);
+                Helper.SetMediaType(ref client);
+                Helper.SetAPIRequestHeader(ref client, productKey, apiUserName, apiUserPassword);
+
+                HttpResponseMessage response = client.PostAsJsonAsync(Helper.SSOAuthenticateAPIUrl, user).Result;
+                if (response.IsSuccessStatusCode)
+                {
+                    var authResult = JsonConvert.DeserializeObject<UserAuthenticateResponseModel>(response.Content.ReadAsStringAsync().Result);
+                    return authResult;
+                }
+                else
+                {
+                    throw new Exception(response.StatusCode.ToString());
+                }
+            }
+            catch (Exception ex)
+            {
+                objErrorLogServices.LogError("User", "SSOAuthenticate", "", userName, ex.ToString());
+                throw;
+            }
+        }
+		
+		public static void SetMediaType(ref HttpClient client)
+        {
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(Helper.JsonMediaType));
+        }
+		
+		  public static void SetAPIRequestHeader(ref HttpClient client, string apiSecretKey, string appUserName, string apiUserPassword)
+        {
+            client.DefaultRequestHeaders.Add(Helper.HttpHeaderAPIAppSecretKey, apiSecretKey);
+            client.DefaultRequestHeaders.Add(Helper.HttpHeaderAPIUserName, appUserName);
+            client.DefaultRequestHeaders.Add(Helper.HttpHeaderAPIUserPassword, apiUserPassword);
+        }
+		//values
+		public static string SSOAuthenticateAPIUrl { get { return "IDS/V1/App/User/SSOUserAuthenticate"; } } 
+		 [ModelValidator]
+        [Route("IDS/V1/App/User/SSOUserAuthenticate")]
+        [HttpPost]
+        public IHttpActionResult SSOAuthenticateAppUser([FromBody] Models.SSOUserAuthenticateRequestModel userAuthenticateRequest)
+        {
+            try
+            {
+                AppRepository repo = new AppRepository();
+                Models.UserAuthenticateResponseModel response = new Models.UserAuthenticateResponseModel();
+
+                response = repo.SSOAuthenticateAppUser(userAuthenticateRequest, Request);
+                if (response != null)
+                    return Ok(response);
+                return Ok("Response is empty");
+            }
+            catch (Exception ex)
+            {
+                objErrorLogServices.LogError("App", "SSOAuthenticateAppUser", "", userAuthenticateRequest.UserEmail, ex.ToString());
+                return Ok(ex.Message);
+            }
+
+        }
+		//Get LTTs 
+		 public CustomEmployeePersonalDetail GetEmployeePersonalDetail(string pEmployeeNo, CustomClientAPIDetails objAPIDetails)
+        {
+            CustomEmployeePersonalDetail objEmployeePersonalDetail = new CustomEmployeePersonalDetail();
+            string url = objAPIDetails.APIURL + pEmployeeNo + "/";
+            HttpClient client = new HttpClient();
+            client.BaseAddress = new Uri(url);
+            var requestMessage = new HttpRequestMessage
+            {
+                Version = HttpVersion.Version10
+            };
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes(string.Format("{0}:{1}", objAPIDetails.UserName, objAPIDetails.Password))));
+            HttpResponseMessage response = client.SendAsync(requestMessage).Result;
+            var authResult = JsonConvert.DeserializeObject<List<CustomEmployeePersonalDetail>>(response.Content.ReadAsStringAsync().Result);
+            return authResult[0];
+        }
